@@ -250,11 +250,20 @@ function makeBars(containerId, entries, colors){
 
 function destroyChart(id){if(charts[id]){charts[id].destroy();delete charts[id];}}
 
-async function loadData(){
-  try{
-    const res = await fetch(API);
-    if(!res.ok) throw new Error('HTTP '+res.status);
-    const json = await res.json();
+function loadData(){
+  const callbackName = 'delcoCb_' + Date.now();
+  const script = document.createElement('script');
+  script.src = API + '?callback=' + callbackName;
+  script.onerror = () => {
+    document.getElementById('loadingMsg').style.display='none';
+    const el = document.getElementById('errMsg');
+    el.style.display='block';
+    el.textContent='Өгөгдөл татахад алдаа гарлаа. Apps Script URL шалгана уу.';
+  };
+  window[callbackName] = function(json) {
+    delete window[callbackName];
+    document.body.removeChild(script);
+    try{
 
     allOrders = (json.orders||[]).map(r=>{
       const d = parseDate(r['Бүртгэсэн огноо']);
@@ -293,12 +302,14 @@ async function loadData(){
     document.getElementById('mainContent').style.display='block';
     filtered = [...allOrders];
     renderAll();
-  }catch(e){
-    document.getElementById('loadingMsg').style.display='none';
-    const el = document.getElementById('errMsg');
-    el.style.display='block';
-    el.textContent='Өгөгдөл татахад алдаа гарлаа: '+e.message;
-  }
+    }catch(e){
+      document.getElementById('loadingMsg').style.display='none';
+      const el = document.getElementById('errMsg');
+      el.style.display='block';
+      el.textContent='Өгөгдөл боловсруулахад алдаа гарлаа: '+e.message;
+    }
+  };
+  document.body.appendChild(script);
 }
 
 function applyFilter(){
