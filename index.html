@@ -1,0 +1,524 @@
+<!DOCTYPE html>
+<html lang="mn">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Дэлко хүргэлтийн дашбоард</title>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.js"></script>
+<style>
+*{box-sizing:border-box;margin:0;padding:0;}
+body{font-family:'Segoe UI',Arial,sans-serif;background:#f5f5f5;color:#1a1a1a;min-height:100vh;}
+.header{background:#fff;border-bottom:1px solid #e5e5e5;padding:16px 24px;display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:12px;position:sticky;top:0;z-index:100;}
+.header h1{font-size:16px;font-weight:600;color:#1a1a1a;}
+.logo{font-size:13px;color:#666;font-weight:500;}
+.tabs{display:flex;gap:3px;background:#f0f0f0;padding:3px;border-radius:8px;}
+.tab{font-size:13px;padding:6px 16px;border:none;background:transparent;color:#666;border-radius:6px;cursor:pointer;font-weight:400;transition:all .15s;}
+.tab.on{background:#fff;color:#1a1a1a;font-weight:500;box-shadow:0 1px 3px rgba(0,0,0,.1);}
+.container{max-width:1200px;margin:0 auto;padding:20px 24px;}
+.filter-bar{background:#fff;border:1px solid #e5e5e5;border-radius:10px;padding:14px 18px;display:flex;align-items:center;gap:12px;margin-bottom:20px;flex-wrap:wrap;}
+.filter-bar label{font-size:12px;color:#666;font-weight:500;}
+.filter-bar input{font-size:13px;padding:6px 10px;border:1px solid #ddd;border-radius:6px;background:#fff;color:#1a1a1a;outline:none;}
+.filter-bar input:focus{border-color:#1D9E75;}
+.btn{font-size:13px;padding:6px 16px;border:1px solid #ddd;border-radius:6px;background:#fff;color:#1a1a1a;cursor:pointer;font-weight:500;transition:all .15s;}
+.btn:hover{background:#f5f5f5;}
+.btn.primary{background:#1D9E75;color:#fff;border-color:#1D9E75;}
+.btn.primary:hover{background:#0F6E56;}
+.metric-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(160px,1fr));gap:12px;margin-bottom:16px;}
+.mc{background:#fff;border:1px solid #e5e5e5;border-radius:10px;padding:16px 18px;}
+.mc-label{font-size:11px;color:#888;margin-bottom:6px;font-weight:500;text-transform:uppercase;letter-spacing:.04em;}
+.mc-val{font-size:24px;font-weight:600;color:#1a1a1a;}
+.mc-sub{font-size:11px;margin-top:4px;color:#888;}
+.status-row{display:grid;grid-template-columns:repeat(3,1fr);gap:12px;margin-bottom:20px;}
+.sc{border-radius:10px;padding:14px 16px;}
+.sc.del{background:#E1F5EE;border:1px solid #9FE1CB;}
+.sc.del .sl{color:#0F6E56;}
+.sc.del .sv{color:#085041;}
+.sc.pend{background:#FAEEDA;border:1px solid #FAC775;}
+.sc.pend .sl{color:#854F0B;}
+.sc.pend .sv{color:#633806;}
+.sc.canc{background:#FAECE7;border:1px solid #F5C4B3;}
+.sc.canc .sl{color:#993C1D;}
+.sc.canc .sv{color:#712B13;}
+.sl{font-size:11px;font-weight:600;margin-bottom:4px;text-transform:uppercase;letter-spacing:.04em;}
+.sv{font-size:22px;font-weight:700;}
+.sp{font-size:11px;opacity:.7;margin-top:2px;}
+.grid2{display:grid;grid-template-columns:1fr 1fr;gap:16px;margin-bottom:16px;}
+@media(max-width:640px){.grid2{grid-template-columns:1fr;}.status-row{grid-template-columns:1fr;}}
+.card{background:#fff;border:1px solid #e5e5e5;border-radius:10px;padding:16px 18px;margin-bottom:16px;}
+.card-title{font-size:11px;color:#888;margin-bottom:14px;font-weight:600;text-transform:uppercase;letter-spacing:.05em;}
+.chart-wrap{position:relative;width:100%;}
+.bar-row{display:flex;align-items:center;gap:8px;margin-bottom:6px;}
+.bar-lbl{font-size:12px;color:#555;width:130px;flex-shrink:0;text-align:right;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
+.bar-track{flex:1;background:#f0f0f0;border-radius:3px;height:14px;overflow:hidden;}
+.bar-fill{height:100%;border-radius:3px;transition:width .5s ease;}
+.bar-val{font-size:12px;color:#888;min-width:40px;text-align:right;font-weight:500;}
+.section{display:none;}.section.on{display:block;}
+.loading{text-align:center;padding:4rem;color:#888;font-size:14px;}
+.loading .spinner{width:32px;height:32px;border:3px solid #e5e5e5;border-top-color:#1D9E75;border-radius:50%;animation:spin .8s linear infinite;margin:0 auto 16px;}
+@keyframes spin{to{transform:rotate(360deg);}}
+.err{text-align:center;padding:3rem;color:#993C1D;font-size:13px;background:#FAECE7;border-radius:10px;border:1px solid #F5C4B3;}
+.mode-row{display:grid;grid-template-columns:repeat(3,1fr);gap:12px;margin-bottom:16px;}
+.mode-card{border-radius:10px;padding:14px 16px;text-align:center;border:1px solid;}
+.mode-card.tat{background:#E1F5EE;border-color:#9FE1CB;}
+.mode-card.tat .mv{color:#085041;}
+.mode-card.tat .ml{color:#0F6E56;}
+.mode-card.aguu{background:#E6F1FB;border-color:#B5D4F4;}
+.mode-card.aguu .mv{color:#0C447C;}
+.mode-card.aguu .ml{color:#185FA5;}
+.mode-card.total{background:#f5f5f5;border-color:#e5e5e5;}
+.mode-card.total .mv{color:#1a1a1a;}
+.mode-card.total .ml{color:#666;}
+.mv{font-size:26px;font-weight:700;}
+.ml{font-size:11px;margin-top:4px;font-weight:500;}
+table.dt{width:100%;border-collapse:collapse;font-size:13px;}
+table.dt th{background:#f8f8f8;padding:8px 12px;text-align:left;font-weight:600;color:#666;border-bottom:1px solid #e5e5e5;font-size:11px;text-transform:uppercase;letter-spacing:.04em;}
+table.dt td{padding:9px 12px;color:#1a1a1a;border-bottom:1px solid #f0f0f0;}
+table.dt tr:last-child td{border-bottom:none;}
+table.dt tr:hover td{background:#fafafa;}
+.pct-bar{display:flex;align-items:center;gap:8px;}
+.pct-track{flex:1;background:#f0f0f0;border-radius:3px;height:7px;overflow:hidden;}
+.pct-fill{height:100%;border-radius:3px;}
+.badge{display:inline-block;font-size:10px;padding:2px 8px;border-radius:4px;font-weight:600;}
+.badge.tat{background:#E1F5EE;color:#0F6E56;}
+.badge.aguu{background:#E6F1FB;color:#185FA5;}
+.badge.other{background:#f0f0f0;color:#666;}
+.tbl-wrap{overflow-x:auto;}
+.updated{font-size:11px;color:#aaa;}
+</style>
+</head>
+<body>
+
+<div class="header">
+  <div>
+    <div class="logo">Delco.mn</div>
+    <h1>Хүргэлтийн дашбоард</h1>
+  </div>
+  <div class="tabs">
+    <button class="tab on" onclick="switchTab('overview')">Ерөнхий</button>
+    <button class="tab" onclick="switchTab('merchant')">Харилцагч</button>
+    <button class="tab" onclick="switchTab('cancel')">Цуцлалт</button>
+    <button class="tab" onclick="switchTab('location')">Байршил</button>
+  </div>
+</div>
+
+<div class="container">
+  <div class="filter-bar">
+    <label>Эхлэх огноо</label>
+    <input type="date" id="dateFrom">
+    <label>Дуусах огноо</label>
+    <input type="date" id="dateTo">
+    <button class="btn primary" onclick="applyFilter()">Хайх</button>
+    <button class="btn" onclick="resetFilter()">Бүгд</button>
+    <span class="updated" id="updatedAt"></span>
+  </div>
+
+  <div id="loadingMsg" class="loading">
+    <div class="spinner"></div>
+    Өгөгдөл татаж байна...
+  </div>
+  <div id="errMsg" class="err" style="display:none;"></div>
+
+  <div id="mainContent" style="display:none;">
+
+    <div id="sec-overview" class="section on">
+      <div class="metric-grid" id="metrics"></div>
+      <div class="status-row" id="statusRow"></div>
+      <div class="grid2">
+        <div class="card">
+          <div class="card-title">Өдрөөр — захиалгын тоо</div>
+          <div class="chart-wrap" style="height:200px;">
+            <canvas id="dailyChart" role="img" aria-label="Өдрөөр захиалгын тоо"></canvas>
+          </div>
+        </div>
+        <div class="card">
+          <div class="card-title">Өдрөөр — орлого (₮)</div>
+          <div class="chart-wrap" style="height:200px;">
+            <canvas id="revChart" role="img" aria-label="Өдрөөр орлого"></canvas>
+          </div>
+        </div>
+      </div>
+      <div class="card">
+        <div class="card-title">Сараар — захиалгын тоо & амжилтын %</div>
+        <div class="chart-wrap" style="height:220px;">
+          <canvas id="monthlyChart" role="img" aria-label="Сараар захиалга"></canvas>
+        </div>
+      </div>
+    </div>
+
+    <div id="sec-merchant" class="section">
+      <div class="mode-row" id="modeRow"></div>
+      <div class="card">
+        <div class="card-title">Харилцагчаар — захиалга & амжилтын %</div>
+        <div class="tbl-wrap">
+          <table class="dt" id="merchantTable">
+            <thead>
+              <tr>
+                <th>Харилцагч</th>
+                <th>Горим</th>
+                <th>Нийт захиалга</th>
+                <th>Хүргэгдсэн</th>
+                <th>Цуцлагдсан</th>
+                <th>Амжилт %</th>
+              </tr>
+            </thead>
+            <tbody></tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+
+    <div id="sec-cancel" class="section">
+      <div class="grid2">
+        <div class="card">
+          <div class="card-title">Цуцлалтын шалтгаан</div>
+          <div id="cancelReasons"></div>
+        </div>
+        <div class="card">
+          <div class="card-title">Дэд статусаар</div>
+          <div id="subStatusBars"></div>
+        </div>
+      </div>
+      <div class="card">
+        <div class="card-title">Харилцагчаар цуцлалт (Top 10)</div>
+        <div id="cancelByMerchant"></div>
+      </div>
+    </div>
+
+    <div id="sec-location" class="section">
+      <div class="grid2">
+        <div class="card">
+          <div class="card-title">Хүргэлт — дүүргээр (Top 10)</div>
+          <div id="delivDistrict"></div>
+        </div>
+        <div class="card">
+          <div class="card-title">Хүргэлт — хороогоор (Top 10)</div>
+          <div id="delivKhoroo"></div>
+        </div>
+      </div>
+      <div class="card">
+        <div class="card-title">Татан авалтын байршил — дүүргээр</div>
+        <div id="pickupDistrict"></div>
+      </div>
+    </div>
+
+  </div>
+</div>
+
+<script>
+const API = 'https://script.google.com/macros/s/AKfycbymHj9t6ViQjdODTTmj9HUB5GdL-MyVSAGtUW6HO31vOVkRzfDamdPXZvRzXN9B2YQR/exec';
+let allOrders = [], allMerchants = [], filtered = [];
+let charts = {};
+let currentTab = 'overview';
+
+function fmt(n){return Math.round(n).toLocaleString('mn-MN');}
+function fmtM(n){
+  if(n>=1000000) return (n/1000000).toFixed(1)+'M₮';
+  if(n>=1000) return Math.round(n/1000)+'K₮';
+  return fmt(n)+'₮';
+}
+
+function parseDate(v){
+  if(!v) return null;
+  if(v instanceof Date) return v;
+  const d = new Date(v);
+  return isNaN(d.getTime()) ? null : d;
+}
+
+function parseAddr(addr){
+  if(!addr) return {city:'',district:'',khoroo:''};
+  const parts = String(addr).split(',').map(s=>s.trim());
+  return {city:parts[0]||'',district:parts[1]||'',khoroo:parts[2]||''};
+}
+
+function groupBy(arr,fn){
+  const m={};
+  arr.forEach(r=>{const k=fn(r);if(!m[k])m[k]=[];m[k].push(r);});
+  return m;
+}
+
+function makeBars(containerId, entries, colors){
+  const max = entries.length ? Math.max(...entries.map(e=>e[1])) : 1;
+  const def = ['#1D9E75','#185FA5','#D85A30','#BA7517','#7F77DD','#D4537E','#5DCAA5','#378ADD','#EF9F27','#993C1D'];
+  document.getElementById(containerId).innerHTML = entries.map(([lbl,val],i)=>`
+    <div class="bar-row">
+      <div class="bar-lbl" title="${lbl}">${lbl||'Тодорхойгүй'}</div>
+      <div class="bar-track"><div class="bar-fill" style="width:${max?Math.round(val/max*100):0}%;background:${colors?colors[i%colors.length]:def[i%def.length]};"></div></div>
+      <div class="bar-val">${fmt(val)}</div>
+    </div>
+  `).join('');
+}
+
+function destroyChart(id){if(charts[id]){charts[id].destroy();delete charts[id];}}
+
+async function loadData(){
+  try{
+    const res = await fetch(API);
+    if(!res.ok) throw new Error('HTTP '+res.status);
+    const json = await res.json();
+
+    allOrders = (json.orders||[]).map(r=>{
+      const d = parseDate(r['Бүртгэсэн огноо']);
+      const addr = parseAddr(r['Хаяг']||'');
+      return{
+        date:d,
+        code:String(r['Захиалгын код']||''),
+        client:String(r['Харилцагч']||''),
+        amount:parseFloat(r['Төлбөрийн дүн'])||0,
+        paid:parseFloat(r['Төлсөн'])||0,
+        payStatus:String(r['Төлбөрийн төлөв']||''),
+        delivStatus:String(r['Хүргэлтийн төлөв']||''),
+        cancelReason:String(r['cancel_reason']||''),
+        subStatus:String(r['delivery_sub_status']||''),
+        lastStatus:String(r['Сүүлийн хүргэлтийн төлөв']||''),
+        lastSub:String(r['Сүүлийн delivery_sub_status']||''),
+        city:addr.city, district:addr.district, khoroo:addr.khoroo
+      };
+    }).filter(r=>r.date);
+
+    allMerchants = (json.merchants||[]).map(r=>({
+      name:String(r['Нэр']||''),
+      address:String(r['Хаяг']||''),
+      mode:String(r['Горим']||'')
+    })).filter(r=>r.name);
+
+    const dates = allOrders.map(r=>r.date.getTime());
+    if(dates.length){
+      const mn = new Date(Math.min(...dates));
+      const mx = new Date(Math.max(...dates));
+      document.getElementById('dateFrom').value = mn.toISOString().slice(0,10);
+      document.getElementById('dateTo').value = mx.toISOString().slice(0,10);
+    }
+    document.getElementById('updatedAt').textContent = 'Шинэчлэгдсэн: '+new Date().toLocaleTimeString('mn-MN');
+    document.getElementById('loadingMsg').style.display='none';
+    document.getElementById('mainContent').style.display='block';
+    filtered = [...allOrders];
+    renderAll();
+  }catch(e){
+    document.getElementById('loadingMsg').style.display='none';
+    const el = document.getElementById('errMsg');
+    el.style.display='block';
+    el.textContent='Өгөгдөл татахад алдаа гарлаа: '+e.message;
+  }
+}
+
+function applyFilter(){
+  const from = document.getElementById('dateFrom').value;
+  const to = document.getElementById('dateTo').value;
+  filtered = allOrders.filter(r=>{
+    if(from && r.date < new Date(from)) return false;
+    if(to && r.date > new Date(to+'T23:59:59')) return false;
+    return true;
+  });
+  renderAll();
+}
+
+function resetFilter(){
+  const dates = allOrders.map(r=>r.date.getTime());
+  if(dates.length){
+    document.getElementById('dateFrom').value = new Date(Math.min(...dates)).toISOString().slice(0,10);
+    document.getElementById('dateTo').value = new Date(Math.max(...dates)).toISOString().slice(0,10);
+  }
+  filtered = [...allOrders];
+  renderAll();
+}
+
+function switchTab(tab){
+  currentTab=tab;
+  document.querySelectorAll('.tab').forEach((b,i)=>{
+    b.classList.toggle('on',['overview','merchant','cancel','location'][i]===tab);
+  });
+  document.querySelectorAll('.section').forEach(s=>s.classList.remove('on'));
+  document.getElementById('sec-'+tab).classList.add('on');
+}
+
+function isDelivered(r){return r.delivStatus==='DELIVERED'||r.lastStatus==='DELIVERED';}
+function isCancelled(r){return r.delivStatus==='CANCELLED'||r.lastStatus==='CANCELLED';}
+
+function renderAll(){
+  renderOverview();
+  renderMerchant();
+  renderCancel();
+  renderLocation();
+}
+
+function renderOverview(){
+  const total = filtered.length;
+  const delivered = filtered.filter(isDelivered).length;
+  const cancelled = filtered.filter(isCancelled).length;
+  const pending = total - delivered - cancelled;
+  const totalRev = filtered.reduce((s,r)=>s+r.amount,0);
+  const avg = total ? Math.round(totalRev/total) : 0;
+  const rate = total ? Math.round(delivered/total*100) : 0;
+  const uniqueClients = new Set(filtered.map(r=>r.client)).size;
+
+  document.getElementById('metrics').innerHTML=`
+    <div class="mc"><div class="mc-label">Нийт захиалга</div><div class="mc-val">${fmt(total)}</div></div>
+    <div class="mc"><div class="mc-label">Нийт орлого</div><div class="mc-val">${fmtM(totalRev)}</div></div>
+    <div class="mc"><div class="mc-label">Амжилтын %</div><div class="mc-val">${rate}%</div></div>
+    <div class="mc"><div class="mc-label">Дундаж захиалга</div><div class="mc-val">${fmtM(avg)}</div></div>
+    <div class="mc"><div class="mc-label">Идэвхтэй харилцагч</div><div class="mc-val">${uniqueClients}</div></div>
+  `;
+
+  document.getElementById('statusRow').innerHTML=`
+    <div class="sc del"><div class="sl">Хүргэгдсэн</div><div class="sv">${fmt(delivered)}</div><div class="sp">${Math.round(delivered/(total||1)*100)}%</div></div>
+    <div class="sc pend"><div class="sl">Явцад / Шинэ</div><div class="sv">${fmt(pending)}</div><div class="sp">${Math.round(pending/(total||1)*100)}%</div></div>
+    <div class="sc canc"><div class="sl">Цуцлагдсан</div><div class="sv">${fmt(cancelled)}</div><div class="sp">${Math.round(cancelled/(total||1)*100)}%</div></div>
+  `;
+
+  // Daily chart - last 60 days
+  const byDay = groupBy(filtered, r=>r.date.toISOString().slice(0,10));
+  const days = Object.keys(byDay).sort().slice(-60);
+  const dayLabels = days.map(d=>{const p=d.split('-');return p[2]+'/'+p[1];});
+  const dayCounts = days.map(d=>(byDay[d]||[]).length);
+  const dayRevs = days.map(d=>(byDay[d]||[]).reduce((s,r)=>s+r.amount,0));
+
+  destroyChart('dailyChart');
+  charts['dailyChart'] = new Chart(document.getElementById('dailyChart'),{
+    type:'bar',
+    data:{labels:dayLabels,datasets:[{data:dayCounts,backgroundColor:'#1D9E75',borderRadius:3}]},
+    options:{responsive:true,maintainAspectRatio:false,plugins:{legend:{display:false}},
+      scales:{x:{ticks:{font:{size:10},color:'#999',autoSkip:true,maxTicksLimit:15,maxRotation:45},grid:{display:false}},
+              y:{ticks:{font:{size:10},color:'#999'},grid:{color:'rgba(0,0,0,0.05)'}}}}
+  });
+
+  destroyChart('revChart');
+  charts['revChart'] = new Chart(document.getElementById('revChart'),{
+    type:'line',
+    data:{labels:dayLabels,datasets:[{data:dayRevs,borderColor:'#185FA5',backgroundColor:'rgba(24,95,165,0.1)',tension:0.3,fill:true,pointRadius:1,borderWidth:2}]},
+    options:{responsive:true,maintainAspectRatio:false,plugins:{legend:{display:false}},
+      scales:{x:{ticks:{font:{size:10},color:'#999',autoSkip:true,maxTicksLimit:15,maxRotation:45},grid:{display:false}},
+              y:{ticks:{font:{size:10},color:'#999',callback:v=>fmtM(v)},grid:{color:'rgba(0,0,0,0.05)'}}}}
+  });
+
+  // Monthly chart
+  const byMonth = groupBy(filtered, r=>{
+    const d=r.date; return d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0');
+  });
+  const months = Object.keys(byMonth).sort();
+  const mLabels = months.map(m=>{const p=m.split('-');return p[1]+'р сар';});
+  const mCounts = months.map(m=>byMonth[m].length);
+  const mRates = months.map(m=>{
+    const rows=byMonth[m]; return rows.length?Math.round(rows.filter(isDelivered).length/rows.length*100):0;
+  });
+
+  destroyChart('monthlyChart');
+  charts['monthlyChart'] = new Chart(document.getElementById('monthlyChart'),{
+    type:'bar',
+    data:{labels:mLabels,datasets:[
+      {label:'Захиалга',data:mCounts,backgroundColor:'#1D9E75',borderRadius:3,yAxisID:'y'},
+      {label:'Амжилт %',data:mRates,type:'line',borderColor:'#D85A30',backgroundColor:'transparent',tension:0.3,pointRadius:4,borderWidth:2,yAxisID:'y1'}
+    ]},
+    options:{responsive:true,maintainAspectRatio:false,
+      plugins:{legend:{display:true,position:'top',labels:{font:{size:11},boxWidth:12}}},
+      scales:{
+        x:{ticks:{font:{size:11},color:'#999'},grid:{display:false}},
+        y:{ticks:{font:{size:10},color:'#999'},grid:{color:'rgba(0,0,0,0.05)'},position:'left'},
+        y1:{ticks:{font:{size:10},color:'#D85A30',callback:v=>v+'%'},grid:{display:false},position:'right',min:0,max:100}
+      }}
+  });
+}
+
+function renderMerchant(){
+  const merchantMap = {};
+  allMerchants.forEach(m=>{ merchantMap[m.name]={mode:m.mode,address:m.address}; });
+
+  const tatCount = allMerchants.filter(m=>{
+    const md=m.mode.toLowerCase(); return md.includes('татан')||md.includes('pickup');
+  }).length;
+  const aguuCount = allMerchants.filter(m=>{
+    const md=m.mode.toLowerCase(); return md.includes('агуулах')||md.includes('warehouse');
+  }).length;
+
+  document.getElementById('modeRow').innerHTML=`
+    <div class="mode-card tat"><div class="mv">${tatCount}</div><div class="ml">Татан авалт</div></div>
+    <div class="mode-card aguu"><div class="mv">${aguuCount}</div><div class="ml">Агуулах</div></div>
+    <div class="mode-card total"><div class="mv">${allMerchants.length}</div><div class="ml">Нийт харилцагч</div></div>
+  `;
+
+  const byClient = groupBy(filtered, r=>r.client);
+  const rows = Object.entries(byClient).map(([name,orders])=>{
+    const del = orders.filter(isDelivered).length;
+    const canc = orders.filter(isCancelled).length;
+    const rate = orders.length ? Math.round(del/orders.length*100) : 0;
+    const info = merchantMap[name]||{mode:'-'};
+    return{name,count:orders.length,delivered:del,cancelled:canc,rate,mode:info.mode||'-'};
+  }).sort((a,b)=>b.count-a.count);
+
+  const tbody = document.querySelector('#merchantTable tbody');
+  tbody.innerHTML = rows.map(r=>{
+    const md = r.mode.toLowerCase();
+    const badgeClass = md.includes('агуулах')||md.includes('warehouse')?'aguu':md.includes('татан')||md.includes('pickup')?'tat':'other';
+    const color = r.rate>=80?'#1D9E75':r.rate>=60?'#BA7517':'#993C1D';
+    return`<tr>
+      <td style="font-weight:600;">${r.name||'Тодорхойгүй'}</td>
+      <td><span class="badge ${badgeClass}">${r.mode||'-'}</span></td>
+      <td style="text-align:right;">${fmt(r.count)}</td>
+      <td style="text-align:right;color:#0F6E56;">${fmt(r.delivered)}</td>
+      <td style="text-align:right;color:#993C1D;">${fmt(r.cancelled)}</td>
+      <td style="min-width:120px;">
+        <div class="pct-bar">
+          <div class="pct-track"><div class="pct-fill" style="width:${r.rate}%;background:${color};"></div></div>
+          <span style="font-size:12px;min-width:32px;text-align:right;font-weight:600;color:${color};">${r.rate}%</span>
+        </div>
+      </td>
+    </tr>`;
+  }).join('');
+}
+
+function renderCancel(){
+  const cancelled = filtered.filter(r=>isCancelled(r));
+
+  const byReason = groupBy(cancelled, r=>r.cancelReason||'Тодорхойгүй');
+  const reasonEntries = Object.entries(byReason)
+    .filter(([k])=>k&&k!=='undefined'&&k!=='null')
+    .sort((a,b)=>b[1].length-a[1].length).slice(0,10);
+  if(reasonEntries.length){
+    makeBars('cancelReasons', reasonEntries.map(([k,v])=>[k,v.length]), ['#D85A30','#BA7517','#993C1D','#854F0B','#7F77DD','#D4537E','#5DCAA5','#378ADD','#EF9F27','#185FA5']);
+  } else {
+    document.getElementById('cancelReasons').innerHTML='<p style="color:#888;font-size:13px;padding:1rem 0;">Өгөгдөл байхгүй</p>';
+  }
+
+  const bySub = groupBy(cancelled, r=>r.subStatus||r.lastSub||'Тодорхойгүй');
+  const subEntries = Object.entries(bySub)
+    .filter(([k])=>k&&k!=='undefined'&&k!=='null')
+    .sort((a,b)=>b[1].length-a[1].length).slice(0,8);
+  if(subEntries.length){
+    makeBars('subStatusBars', subEntries.map(([k,v])=>[k,v.length]), ['#D85A30','#BA7517','#993C1D','#854F0B','#7F77DD','#D4537E','#5DCAA5','#378ADD']);
+  } else {
+    document.getElementById('subStatusBars').innerHTML='<p style="color:#888;font-size:13px;padding:1rem 0;">Өгөгдөл байхгүй</p>';
+  }
+
+  const byClient = groupBy(cancelled, r=>r.client);
+  const clientEntries = Object.entries(byClient).sort((a,b)=>b[1].length-a[1].length).slice(0,10);
+  makeBars('cancelByMerchant', clientEntries.map(([k,v])=>[k,v.length]), Array(10).fill('#D85A30'));
+}
+
+function renderLocation(){
+  const byDistrict = groupBy(filtered, r=>r.district||'Тодорхойгүй');
+  const distEntries = Object.entries(byDistrict)
+    .filter(([k])=>k&&k!=='Тодорхойгүй'||true)
+    .sort((a,b)=>b[1].length-a[1].length).slice(0,10);
+  makeBars('delivDistrict', distEntries.map(([k,v])=>[k,v.length]));
+
+  const byKhoroo = groupBy(filtered, r=>{
+    const d=r.district, k=r.khoroo;
+    if(d&&k) return d+' / '+k;
+    return k||'Тодорхойгүй';
+  });
+  const khorooEntries = Object.entries(byKhoroo).sort((a,b)=>b[1].length-a[1].length).slice(0,10);
+  makeBars('delivKhoroo', khorooEntries.map(([k,v])=>[k,v.length]));
+
+  const pickupMap = {};
+  allMerchants.forEach(m=>{
+    const addr = parseAddr(m.address);
+    const d = addr.district||'Тодорхойгүй';
+    pickupMap[d] = (pickupMap[d]||0)+1;
+  });
+  const pickupEntries = Object.entries(pickupMap).sort((a,b)=>b[1]-a[1]);
+  makeBars('pickupDistrict', pickupEntries, Array(10).fill('#185FA5'));
+}
+
+loadData();
+</script>
+</body>
+</html>
