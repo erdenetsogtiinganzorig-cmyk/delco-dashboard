@@ -551,44 +551,51 @@ function renderLocation(){
   const khorooEntries = Object.entries(byKhoroo).sort((a,b)=>b[1].length-a[1].length).slice(0,10);
   makeBars('delivKhoroo', khorooEntries.map(([k,v])=>[k,v.length]));
 
-  // Pickup by district from merchant addresses — clickable
-  const pickupByDistrict = {};
+  // Татан авалттай харилцагчид (горим = "Татан авалттай")
+  const tatMerchantList = allMerchants.filter(m=>{
+    const md = m.mode.toLowerCase();
+    return md.includes('татан')||md.includes('pickup');
+  });
+  const tatMerchantNames = new Set(tatMerchantList.map(m=>m.name));
+
+  // Татан авалтын цэг — харилцагчийн хаягаар (харилцагчийн тоо)
+  const pickupByDistrict = {};  // district -> {count, khoroos}
   const pickupByKhoroo = {};
-  allMerchants.forEach(m=>{
-    const addr = parseAddr(m.address);
-    const d = addr.district||'Тодорхойгүй';
+  tatMerchantList.forEach(m=>{
+    if(!m.address || m.address.trim()==='') return; // хаяг хоосон бол алгасна
+    const parts = m.address.split(';')[0]; // олон хаяг байвал эхнийхийг авна
+    const addr = parseAddr(parts);
+    const d = addr.district||'Хаяг бүртгэгдээгүй';
     const k = addr.khoroo||'Тодорхойгүй';
-    pickupByDistrict[d] = (pickupByDistrict[d]||0)+1;
+    if(!pickupByDistrict[d]) pickupByDistrict[d]={merchants:0,khoroos:{}};
+    pickupByDistrict[d].merchants++;
+    if(!pickupByDistrict[d].khoroos[k]) pickupByDistrict[d].khoroos[k]=0;
+    pickupByDistrict[d].khoroos[k]++;
     if(!pickupByKhoroo[d]) pickupByKhoroo[d]={};
     pickupByKhoroo[d][k] = (pickupByKhoroo[d][k]||0)+1;
   });
 
-  const pickupEntries = Object.entries(pickupByDistrict).sort((a,b)=>b[1]-a[1]);
-  const total = pickupEntries.reduce((s,e)=>s+e[1],0);
-  document.getElementById('pickupDistrictTotal').textContent = '— нийт '+total+' харилцагч';
+  const tatTotal = tatMerchantList.length;
+  const tatWithAddr = tatMerchantList.filter(m=>m.address&&m.address.trim()!=='').length;
+  const tatNoAddr = tatTotal - tatWithAddr;
+  document.getElementById('pickupDistrictTotal').textContent =
+    `— нийт ${tatTotal} харилцагч${tatNoAddr>0?' ('+tatNoAddr+' нь хаяггүй)':''}`;
 
-  // Render as clickable bars
-  const max = pickupEntries.length ? Math.max(...pickupEntries.map(e=>e[1])) : 1;
+  const pickupEntries = Object.entries(pickupByDistrict).sort((a,b)=>b[1].merchants-a[1].merchants);
+  const maxP = pickupEntries.length ? Math.max(...pickupEntries.map(e=>e[1].merchants)) : 1;
   const colors = ['#185FA5','#1D9E75','#D85A30','#BA7517','#7F77DD','#D4537E','#5DCAA5','#378ADD','#EF9F27','#993C1D'];
   document.getElementById('pickupDistrict').innerHTML = pickupEntries.map(([d,val],i)=>`
     <div class="bar-row" onclick="showPickupKhoroo('${d.replace(/'/g,'\\\'')}')" style="cursor:pointer;" title="${d} дүүргийн хороогоор харах">
       <div class="bar-lbl" style="white-space:normal;text-align:right;line-height:1.3;color:#185FA5;text-decoration:underline dotted;">${d}</div>
-      <div class="bar-track"><div class="bar-fill" style="width:${max?Math.round(val/max*100):0}%;background:${colors[i%colors.length]};"></div></div>
-      <div class="bar-val">${fmt(val)} <span style="color:#aaa;font-weight:400;">(${total?Math.round(val/total*100):0}%)</span></div>
+      <div class="bar-track"><div class="bar-fill" style="width:${maxP?Math.round(val.merchants/maxP*100):0}%;background:${colors[i%colors.length]};"></div></div>
+      <div class="bar-val">${fmt(val.merchants)} харилцагч <span style="color:#aaa;font-weight:400;">(${tatWithAddr?Math.round(val.merchants/tatWithAddr*100):0}%)</span></div>
     </div>
   `).join('');
 
   window._pickupByKhoroo = pickupByKhoroo;
 
-  // Татан авалтын захиалга — merchant горимоос харилцагчийн нэрс авч захиалгыг шүүнэ
-  const tatMerchants = new Set(
-    allMerchants.filter(m=>{
-      const md = m.mode.toLowerCase();
-      return md.includes('татан')||md.includes('pickup');
-    }).map(m=>m.name)
-  );
-
-  const pickupOrders = filtered.filter(r=>tatMerchants.has(r.client));
+  // Татан авалтын захиалга — захиалгын хүргэлтийн хаягаар (захиалгын тоо)
+  const pickupOrders = filtered.filter(r=>tatMerchantNames.has(r.client));
   const totalPickupOrders = pickupOrders.length;
   document.getElementById('pickupOrderDistrictTotal').textContent = '— нийт '+fmt(totalPickupOrders)+' захиалга';
 
@@ -608,7 +615,7 @@ function renderLocation(){
     <div class="bar-row" onclick="showPickupOrderKhoroo('${d.replace(/'/g,'\\\'')}')" style="cursor:pointer;" title="${d} дүүргийн хороогоор харах">
       <div class="bar-lbl" style="white-space:normal;text-align:right;line-height:1.3;color:#1D9E75;text-decoration:underline dotted;">${d}</div>
       <div class="bar-track"><div class="bar-fill" style="width:${maxOD?Math.round(rows.length/maxOD*100):0}%;background:${colors2[i%colors2.length]};"></div></div>
-      <div class="bar-val">${fmt(rows.length)} <span style="color:#aaa;font-weight:400;">(${totalPickupOrders?Math.round(rows.length/totalPickupOrders*100):0}%)</span></div>
+      <div class="bar-val">${fmt(rows.length)} захиалга <span style="color:#aaa;font-weight:400;">(${totalPickupOrders?Math.round(rows.length/totalPickupOrders*100):0}%)</span></div>
     </div>
   `).join('');
 
