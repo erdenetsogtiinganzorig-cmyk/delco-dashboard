@@ -429,7 +429,7 @@ function renderAll(){
   renderMerchant();
   renderCancel();
   renderLocation();
-  renderProgress();
+  try{ renderProgress(); }catch(e){ console.error('renderProgress failed:', e); }
 }
 
 function renderOverview(){
@@ -725,6 +725,68 @@ function showPickupKhoroo(district){
   makeBars('pickupKhoroo', entries.map(([k,v])=>[k,v.length]), Array(20).fill('#185FA5'));
   document.getElementById('pickupKhorooCard').style.display='block';
   document.getElementById('pickupKhorooCard').scrollIntoView({behavior:'smooth',block:'nearest'});
+}
+
+function renderProgress(){
+  try{
+  const today = new Date();
+  today.setHours(0,0,0,0);
+
+  const inProgress = filtered.filter(r=>!isDelivered(r)&&!isCancelled(r));
+  const total = inProgress.length;
+  const uniqueClients = new Set(inProgress.map(r=>r.client)).size;
+
+  const ageDays = inProgress.map(r=>{
+    const diff = today.getTime() - new Date(r.date.toDateString()).getTime();
+    return Math.max(0, Math.floor(diff/(1000*60*60*24)));
+  });
+  const avgAge = ageDays.length ? (ageDays.reduce((a,b)=>a+b,0)/ageDays.length).toFixed(1) : 0;
+  const old3 = ageDays.filter(d=>d>=3).length;
+
+  document.getElementById('progressMetrics').innerHTML=`
+    <div class="mc"><div class="mc-label">Нийт явцад захиалга</div><div class="mc-val">${fmt(total)}</div></div>
+    <div class="mc"><div class="mc-label">Харилцагчийн тоо</div><div class="mc-val">${uniqueClients}</div></div>
+    <div class="mc"><div class="mc-label">Дундаж хоног</div><div class="mc-val">${avgAge}</div></div>
+    <div class="mc"><div class="mc-label">3+ хоног болсон</div><div class="mc-val" style="color:${old3>0?'#993C1D':'#1a1a1a'};">${fmt(old3)}</div></div>
+  `;
+
+  const bySub = groupBy(inProgress, r=>mnStatus(r.subStatus||r.lastSub||'Тодорхойгүй'));
+  const subEntries = Object.entries(bySub)
+    .filter(([k])=>k&&k!=='undefined'&&k!=='null'&&k!=='')
+    .sort((a,b)=>b[1].length-a[1].length).slice(0,12);
+  if(subEntries.length){
+    makeBars('progressSubStatus', subEntries.map(([k,v])=>[k,v.length]), ['#185FA5','#1D9E75','#BA7517','#7F77DD','#D85A30','#D4537E','#5DCAA5','#378ADD','#EF9F27','#993C1D','#666','#aaa']);
+  } else {
+    document.getElementById('progressSubStatus').innerHTML='<p style="color:#888;font-size:13px;padding:1rem 0;">Өгөгдөл байхгүй</p>';
+  }
+
+  const byAge = {};
+  inProgress.forEach((r,i)=>{
+    const d = ageDays[i];
+    const lbl = d===0?'Өнөөдөр':d===1?'1 өдөр':d===2?'2 өдөр':d<=7?d+' өдөр':'7+ өдөр';
+    byAge[lbl] = (byAge[lbl]||0)+1;
+  });
+  const ageOrder = ['Өнөөдөр','1 өдөр','2 өдөр','3 өдөр','4 өдөр','5 өдөр','6 өдөр','7 өдөр','7+ өдөр'];
+  const ageEntries = ageOrder.filter(k=>byAge[k]).map(k=>[k,byAge[k]]);
+  const ageColors = ['#1D9E75','#5DCAA5','#BA7517','#D85A30','#993C1D','#993C1D','#993C1D','#712B13','#712B13'];
+  if(ageEntries.length){
+    makeBars('progressByDate', ageEntries, ageColors);
+  } else {
+    document.getElementById('progressByDate').innerHTML='<p style="color:#888;font-size:13px;padding:1rem 0;">Өгөгдөл байхгүй</p>';
+  }
+
+  const byClient = groupBy(inProgress, r=>r.client);
+  const clientEntries = Object.entries(byClient).sort((a,b)=>b[1].length-a[1].length).slice(0,15);
+  if(clientEntries.length){
+    makeBars('progressByMerchant', clientEntries.map(([k,v])=>[k,v.length]), Array(15).fill('#185FA5'));
+  } else {
+    document.getElementById('progressByMerchant').innerHTML='<p style="color:#888;font-size:13px;padding:1rem 0;">Өгөгдөл байхгүй</p>';
+  }
+  }catch(err){
+    console.error('renderProgress error:', err);
+    const el = document.getElementById('progressMetrics');
+    if(el) el.innerHTML='<p style="color:#993C1D;font-size:13px;">Алдаа: '+err.message+'</p>';
+  }
 }
 
 loadData();
