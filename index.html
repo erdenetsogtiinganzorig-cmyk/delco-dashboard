@@ -150,21 +150,26 @@ table.dt tr:hover td{background:#fafafa;}
 
     <div id="sec-merchant" class="section">
       <div class="mode-row" id="modeRow"></div>
-      <div class="grid2" style="margin-bottom:16px;">
+      <div class="grid2" style="margin-bottom:16px;grid-template-columns:repeat(4,1fr);">
         <div class="card" style="cursor:pointer;margin-bottom:0;" onclick="toggleMerchantActivity('active')" id="cardActive">
-          <div class="mc-label">Идэвхтэй харилцагч</div>
+          <div class="mc-label">Идэвхтэй</div>
           <div class="mc-val" id="activeCount" style="color:#0F6E56;">—</div>
           <div class="mc-sub">Сонгосон хугацаанд захиалга өгсөн</div>
         </div>
         <div class="card" style="cursor:pointer;margin-bottom:0;" onclick="toggleMerchantActivity('new')" id="cardNew">
-          <div class="mc-label">Шинэ харилцагч</div>
+          <div class="mc-label">Шинэ</div>
           <div class="mc-val" id="newCount" style="color:#185FA5;">—</div>
-          <div class="mc-sub">Өмнөх 30 хоногт захиалга байгаагүй</div>
+          <div class="mc-sub">Системд огт захиалга өгч байгаагүй</div>
+        </div>
+        <div class="card" style="cursor:pointer;margin-bottom:0;" onclick="toggleMerchantActivity('reactivated')" id="cardReactivated">
+          <div class="mc-label">Дахин идэвхжсэн</div>
+          <div class="mc-val" id="reactivatedCount" style="color:#BA7517;">—</div>
+          <div class="mc-sub">Өмнө байсан, завсарласан, дахин захиалсан</div>
         </div>
         <div class="card" style="cursor:pointer;margin-bottom:0;" onclick="toggleMerchantActivity('churned')" id="cardChurned">
-          <div class="mc-label">Больсон харилцагч</div>
+          <div class="mc-label">Больсон</div>
           <div class="mc-val" id="churnedCount" style="color:#993C1D;">—</div>
-          <div class="mc-sub">Өмнө байсан, одоо захиалга байхгүй</div>
+          <div class="mc-sub">Өмнөх 30 хоногт байсан, одоо байхгүй</div>
         </div>
       </div>
       <div class="card" id="activityListCard" style="display:none;margin-bottom:16px;">
@@ -629,16 +634,22 @@ function renderMerchant(){
   const prevOrders = prevFrom && prevTo ? allOrders.filter(r=>r.date>=prevFrom&&r.date<=prevTo) : [];
   const prevClients = new Set(prevOrders.map(r=>r.client).filter(c=>knownMerchants.has(c)));
 
+  // Сонгосон хугацааны эхнээс өмнөх бүх захиалга
+  const beforeOrders = fromDate ? allOrders.filter(r=>r.date<fromDate) : [];
+  const everBeforeClients = new Set(beforeOrders.map(r=>r.client).filter(c=>knownMerchants.has(c)));
+
   const activeList = [...currentClients];
-  const newList = activeList.filter(c=>!prevClients.has(c));
+  const newList = activeList.filter(c=>!everBeforeClients.has(c));
+  const reactivatedList = activeList.filter(c=>!prevClients.has(c) && everBeforeClients.has(c));
   const churnedList = [...prevClients].filter(c=>!currentClients.has(c));
 
   document.getElementById('activeCount').textContent = activeList.length;
   document.getElementById('newCount').textContent = newList.length;
+  document.getElementById('reactivatedCount').textContent = reactivatedList.length;
   document.getElementById('churnedCount').textContent = churnedList.length;
 
   // Карт highlight
-  ['active','new','churned'].forEach(t=>{
+  ['active','new','reactivated','churned'].forEach(t=>{
     const card = document.getElementById('card'+t.charAt(0).toUpperCase()+t.slice(1));
     if(!card) return;
     card.style.border = merchantActivityFilter===t?'2px solid #1D9E75':'1px solid #e5e5e5';
@@ -650,7 +661,12 @@ function renderMerchant(){
   const listTitle = document.getElementById('activityListTitle');
   const listEl = document.getElementById('activityList');
   if(merchantActivityFilter){
-    const map = {active:{list:activeList,label:'Идэвхтэй харилцагчид',color:'#0F6E56'}, new:{list:newList,label:'Шинэ харилцагчид',color:'#185FA5'}, churned:{list:churnedList,label:'Больсон харилцагчид',color:'#993C1D'}};
+    const map = {
+      active:{list:activeList,label:'Идэвхтэй харилцагчид',color:'#0F6E56'},
+      new:{list:newList,label:'Шинэ харилцагчид',color:'#185FA5'},
+      reactivated:{list:reactivatedList,label:'Дахин идэвхжсэн харилцагчид',color:'#BA7517'},
+      churned:{list:churnedList,label:'Больсон харилцагчид',color:'#993C1D'}
+    };
     const {list,label,color} = map[merchantActivityFilter];
     listTitle.textContent = label+' — '+list.length;
     listTitle.style.color = color;
@@ -709,8 +725,9 @@ function renderMerchant(){
     const color = r.rate>=80?'#1D9E75':r.rate>=60?'#BA7517':'#993C1D';
     const pct = filtTotal ? Math.round(r.count/filtTotal*100) : 0;
     const isNew = newList.includes(r.name);
+    const isReactivated = reactivatedList.includes(r.name);
     return`<tr>
-      <td style="font-weight:600;">${r.name||'Тодорхойгүй'}${isNew?` <span style="font-size:10px;background:#E6F1FB;color:#185FA5;padding:1px 6px;border-radius:4px;font-weight:600;margin-left:4px;">Шинэ</span>`:''}
+      <td style="font-weight:600;">${r.name||'Тодорхойгүй'}${isNew?` <span style="font-size:10px;background:#E6F1FB;color:#185FA5;padding:1px 6px;border-radius:4px;font-weight:600;margin-left:4px;">Шинэ</span>`:''}${isReactivated?` <span style="font-size:10px;background:#FAEEDA;color:#854F0B;padding:1px 6px;border-radius:4px;font-weight:600;margin-left:4px;">Дахин</span>`:''}
       </td>
       <td><span class="badge ${badgeClass}">${r.mode||'-'}</span></td>
       <td style="text-align:right;">${fmt(r.count)} <span style="color:#aaa;font-size:11px;">(${pct}%)</span></td>
