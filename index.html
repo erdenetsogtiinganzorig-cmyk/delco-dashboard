@@ -99,6 +99,7 @@ table.dt tr:hover td{background:#fafafa;}
     <button class="tab" onclick="switchTab('merchant')">Харилцагч</button>
     <button class="tab" onclick="switchTab('cancel')">Цуцлалт</button>
     <button class="tab" onclick="switchTab('location')">Байршил</button>
+    <button class="tab" onclick="switchTab('progress')">Явцад</button>
   </div>
 </div>
 
@@ -218,6 +219,24 @@ table.dt tr:hover td{background:#fafafa;}
       </div>
     </div>
 
+    <div id="sec-progress" class="section">
+      <div class="metric-grid" id="progressMetrics"></div>
+      <div class="grid2">
+        <div class="card">
+          <div class="card-title">Явцад байгаа захиалга — дэд төлөвөөр</div>
+          <div id="progressSubStatus"></div>
+        </div>
+        <div class="card">
+          <div class="card-title">Явцад байгаа захиалга — огноогоор (хэдэн хоног болсон)</div>
+          <div id="progressByDate"></div>
+        </div>
+      </div>
+      <div class="card">
+        <div class="card-title">Явцад байгаа захиалга — харилцагчаар (Top 15)</div>
+        <div id="progressByMerchant"></div>
+      </div>
+    </div>
+
   </div>
 </div>
 
@@ -227,6 +246,47 @@ let allOrders = [], allMerchants = [], filtered = [];
 let charts = {};
 let currentTab = 'overview';
 let cancelMerchantFilter = 'all';
+let merchantModeFilter = 'all';
+
+// Төлвүүдийн монгол нэршил
+const STATUS_MN = {
+  'sals_rejected_without_see':'Бараа үзээгүй татгалзсан',
+  'sals_user_reconnect':'Хэрэглэгч эргээд холбогдох',
+  'sals_saw_refused':'Бараа үзээд татгалзсан',
+  'sals_wrong_order':'Буруу захиалга',
+  'sals_problematic':'Бараа асуудалтай',
+  'sals_duplicated':'Захиалга давхардсан',
+  'sals_take_warehouse':'Агуулахаас авах',
+  'sals_no_balance':'Үлдэгдэлгүй',
+  'oper_retry_failed':'Дахин оролдлого амжилтгүй',
+  'oper_3rd_try_failed':'3дахь оролдлого амжилтгүй',
+  'oper_take_warehouse':'Агуулахаас авах',
+  'oper_no_balance':'Үлдэгдэлгүй /системээс/',
+  'oper_no_balance_together':'Үлдэгдэлгүй/сис-хамт байсан бараа/',
+  'sals_pickup_failed':'Татан авалтаас цуцлагдсан',
+  'oper_wrong_number':'Буруу дугаар',
+  'oper_not_paid':'Орон нутагаас мөнгө ирээгүй',
+  'oper_duplicate_number':'Дугаар давхардсан',
+  'oper_dial_user':'Хэрэглэгч өөрөө залгах',
+  'oper_will_not_delivery':'Хүргэлт очиж амжихгүй',
+  'oper_not_pick_phone':'Утасаа аваагүй',
+  'oper_unable_connect':'Холбогдох боломжгүй',
+  'sals_delivered_warehouse':'Агуулахад авчирсан',
+  'auto_allocated':'Хуваарилагдсан',
+  'auto_received_salesman':'Жолооч барааг хүлээн авсан',
+  'auto_delayed_distribution':'Хуваарилалтаас хойшлогдсон',
+  'auto_prepare':'Нярав бэлтгэсэн',
+  'sals_failed':'Амжилтгүй',
+  'sals_times_have_changed':'Цаг өөрчилсөн',
+  'sals_no_cars_found':'Унаа олдоогүй',
+  'sals_change_address':'Хаяг солих',
+  'sals_not_pick_phone':'Утсаа аваагүй',
+  'sals_unable_connect':'Холбогдох боломжгүй',
+  'sals_delivered':'Хүргэгдсэн',
+  // cancel_reason keys
+  'дахин оролдлого амжилтгүй':'Дахин оролдлого амжилтгүй',
+};
+function mnStatus(key){ return STATUS_MN[key.toLowerCase()]||STATUS_MN[key]||key; }
 
 function fmt(n){return Math.round(n).toLocaleString('mn-MN');}
 function fmtM(n){
@@ -307,7 +367,7 @@ function loadData(){
       name:String(r['Нэр']||''),
       address:String(r['Хаяг']||''),
       mode:String(r['Горим']||'')
-    })).filter(r=>r.name);
+    })).filter(r=>r.name && r.mode.toLowerCase()!=='тест' && r.mode.toLowerCase()!=='test');
 
     const dates = allOrders.map(r=>r.date.getTime());
     if(dates.length){
@@ -355,7 +415,7 @@ function resetFilter(){
 function switchTab(tab){
   currentTab=tab;
   document.querySelectorAll('.tab').forEach((b,i)=>{
-    b.classList.toggle('on',['overview','merchant','cancel','location'][i]===tab);
+    b.classList.toggle('on',['overview','merchant','cancel','location','progress'][i]===tab);
   });
   document.querySelectorAll('.section').forEach(s=>s.classList.remove('on'));
   document.getElementById('sec-'+tab).classList.add('on');
@@ -369,6 +429,7 @@ function renderAll(){
   renderMerchant();
   renderCancel();
   renderLocation();
+  renderProgress();
 }
 
 function renderOverview(){
@@ -452,37 +513,56 @@ function renderMerchant(){
   const merchantMap = {};
   allMerchants.forEach(m=>{ merchantMap[m.name]={mode:m.mode,address:m.address}; });
 
-  const tatCount = allMerchants.filter(m=>{
-    const md=m.mode.toLowerCase(); return md.includes('татан')||md.includes('pickup');
-  }).length;
-  const aguuCount = allMerchants.filter(m=>{
-    const md=m.mode.toLowerCase(); return md.includes('агуулах')||md.includes('warehouse');
-  }).length;
+  const tatCount = allMerchants.filter(m=>{ const md=m.mode.toLowerCase(); return md.includes('татан')||md.includes('pickup'); }).length;
+  const aguuCount = allMerchants.filter(m=>{ const md=m.mode.toLowerCase(); return md.includes('агуулах')||md.includes('warehouse'); }).length;
+  const total = allMerchants.length;
 
-  document.getElementById('modeRow').innerHTML=`
-    <div class="mode-card tat"><div class="mv">${tatCount}</div><div class="ml">Татан авалт</div></div>
-    <div class="mode-card aguu"><div class="mv">${aguuCount}</div><div class="ml">Агуулах</div></div>
-    <div class="mode-card total"><div class="mv">${allMerchants.length}</div><div class="ml">Нийт харилцагч</div></div>
-  `;
-
+  // Mode filter tabs
   const byClient = groupBy(filtered, r=>r.client);
-  const rows = Object.entries(byClient).map(([name,orders])=>{
+  const allRows = Object.entries(byClient).map(([name,orders])=>{
     const del = orders.filter(isDelivered).length;
     const canc = orders.filter(isCancelled).length;
     const rate = orders.length ? Math.round(del/orders.length*100) : 0;
-    const info = merchantMap[name]||{mode:'-'};
-    return{name,count:orders.length,delivered:del,cancelled:canc,rate,mode:info.mode||'-'};
+    const info = merchantMap[name]||{mode:''};
+    return{name,count:orders.length,delivered:del,cancelled:canc,rate,mode:info.mode||''};
   }).sort((a,b)=>b.count-a.count);
 
+  const totalOrders = allRows.reduce((s,r)=>s+r.count,0);
+  const tatOrders = allRows.filter(r=>{ const md=r.mode.toLowerCase(); return md.includes('татан')||md.includes('pickup'); }).reduce((s,r)=>s+r.count,0);
+  const aguuOrders = allRows.filter(r=>{ const md=r.mode.toLowerCase(); return md.includes('агуулах')||md.includes('warehouse'); }).reduce((s,r)=>s+r.count,0);
+
+  document.getElementById('modeRow').innerHTML=`
+    <div class="mode-card ${merchantModeFilter==='all'?'total':'total'}" onclick="setMerchantMode('all')" style="cursor:pointer;border:2px solid ${merchantModeFilter==='all'?'#1a1a1a':'#e5e5e5'};">
+      <div class="mv" style="color:#1a1a1a;">${total}</div><div class="ml" style="color:#666;">Нийт харилцагч</div>
+      <div style="font-size:11px;color:#aaa;margin-top:4px;">${fmt(totalOrders)} захиалга</div>
+    </div>
+    <div class="mode-card tat" onclick="setMerchantMode('tat')" style="cursor:pointer;border:2px solid ${merchantModeFilter==='tat'?'#0F6E56':'#9FE1CB'};">
+      <div class="mv">${tatCount}</div><div class="ml">Татан авалт</div>
+      <div style="font-size:11px;color:#0F6E56;margin-top:4px;">${fmt(tatOrders)} захиалга (${totalOrders?Math.round(tatOrders/totalOrders*100):0}%)</div>
+    </div>
+    <div class="mode-card aguu" onclick="setMerchantMode('aguu')" style="cursor:pointer;border:2px solid ${merchantModeFilter==='aguu'?'#0C447C':'#B5D4F4'};">
+      <div class="mv">${aguuCount}</div><div class="ml">Агуулах</div>
+      <div style="font-size:11px;color:#185FA5;margin-top:4px;">${fmt(aguuOrders)} захиалга (${totalOrders?Math.round(aguuOrders/totalOrders*100):0}%)</div>
+    </div>
+  `;
+
+  const rows = allRows.filter(r=>{
+    if(merchantModeFilter==='tat'){ const md=r.mode.toLowerCase(); return md.includes('татан')||md.includes('pickup'); }
+    if(merchantModeFilter==='aguu'){ const md=r.mode.toLowerCase(); return md.includes('агуулах')||md.includes('warehouse'); }
+    return true;
+  });
+
+  const filtTotal = rows.reduce((s,r)=>s+r.count,0);
   const tbody = document.querySelector('#merchantTable tbody');
   tbody.innerHTML = rows.map(r=>{
     const md = r.mode.toLowerCase();
     const badgeClass = md.includes('агуулах')||md.includes('warehouse')?'aguu':md.includes('татан')||md.includes('pickup')?'tat':'other';
     const color = r.rate>=80?'#1D9E75':r.rate>=60?'#BA7517':'#993C1D';
+    const pct = filtTotal ? Math.round(r.count/filtTotal*100) : 0;
     return`<tr>
       <td style="font-weight:600;">${r.name||'Тодорхойгүй'}</td>
       <td><span class="badge ${badgeClass}">${r.mode||'-'}</span></td>
-      <td style="text-align:right;">${fmt(r.count)}</td>
+      <td style="text-align:right;">${fmt(r.count)} <span style="color:#aaa;font-size:11px;">(${pct}%)</span></td>
       <td style="text-align:right;color:#0F6E56;">${fmt(r.delivered)}</td>
       <td style="text-align:right;color:#993C1D;">${fmt(r.cancelled)}</td>
       <td style="min-width:120px;">
@@ -493,6 +573,11 @@ function renderMerchant(){
       </td>
     </tr>`;
   }).join('');
+}
+
+function setMerchantMode(mode){
+  merchantModeFilter = mode;
+  renderMerchant();
 }
 
 function renderCancel(){
@@ -508,7 +593,7 @@ function renderCancel(){
 
   const cancelled = cancelMerchantFilter==='all' ? allCancelled : allCancelled.filter(r=>r.client===cancelMerchantFilter);
 
-  const byReason = groupBy(cancelled, r=>r.cancelReason||'Тодорхойгүй');
+  const byReason = groupBy(cancelled, r=>mnStatus(r.cancelReason||'Тодорхойгүй'));
   const reasonEntries = Object.entries(byReason)
     .filter(([k])=>k&&k!=='undefined'&&k!=='null'&&k!=='')
     .sort((a,b)=>b[1].length-a[1].length).slice(0,12);
@@ -518,7 +603,7 @@ function renderCancel(){
     document.getElementById('cancelReasons').innerHTML='<p style="color:#888;font-size:13px;padding:1rem 0;">Өгөгдөл байхгүй</p>';
   }
 
-  const bySub = groupBy(cancelled, r=>r.subStatus||r.lastSub||'Тодорхойгүй');
+  const bySub = groupBy(cancelled, r=>mnStatus(r.subStatus||r.lastSub||'Тодорхойгүй'));
   const subEntries = Object.entries(bySub)
     .filter(([k])=>k&&k!=='undefined'&&k!=='null'&&k!=='')
     .sort((a,b)=>b[1].length-a[1].length).slice(0,10);
