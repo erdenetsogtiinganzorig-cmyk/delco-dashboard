@@ -113,6 +113,7 @@ table.dt tr:hover td{background:#fafafa;}
     <button class="btn" onclick="resetFilter()">Бүгд</button>
     <span class="updated" id="updatedAt"></span>
   </div>
+  <div id="monthTabs" style="display:flex;gap:6px;margin-bottom:16px;flex-wrap:wrap;"></div>
 
   <div id="loadingMsg" class="loading">
     <div class="spinner"></div>
@@ -149,6 +150,28 @@ table.dt tr:hover td{background:#fafafa;}
 
     <div id="sec-merchant" class="section">
       <div class="mode-row" id="modeRow"></div>
+      <div class="grid2" style="margin-bottom:16px;">
+        <div class="card" style="cursor:pointer;margin-bottom:0;" onclick="toggleMerchantActivity('active')" id="cardActive">
+          <div class="mc-label">Идэвхтэй харилцагч</div>
+          <div class="mc-val" id="activeCount" style="color:#0F6E56;">—</div>
+          <div class="mc-sub">Сонгосон хугацаанд захиалга өгсөн</div>
+        </div>
+        <div class="card" style="cursor:pointer;margin-bottom:0;" onclick="toggleMerchantActivity('new')" id="cardNew">
+          <div class="mc-label">Шинэ харилцагч</div>
+          <div class="mc-val" id="newCount" style="color:#185FA5;">—</div>
+          <div class="mc-sub">Өмнөх 30 хоногт захиалга байгаагүй</div>
+        </div>
+        <div class="card" style="cursor:pointer;margin-bottom:0;" onclick="toggleMerchantActivity('churned')" id="cardChurned">
+          <div class="mc-label">Больсон харилцагч</div>
+          <div class="mc-val" id="churnedCount" style="color:#993C1D;">—</div>
+          <div class="mc-sub">Өмнө байсан, одоо захиалга байхгүй</div>
+        </div>
+      </div>
+      <div class="card" id="activityListCard" style="display:none;margin-bottom:16px;">
+        <div class="card-title" id="activityListTitle"></div>
+        <div id="activityList"></div>
+      </div>
+      <div class="mode-row" id="modeRow2" style="display:none;"></div>
       <div class="card">
         <div class="card-title">Харилцагчаар — захиалга & амжилтын %</div>
         <div class="tbl-wrap">
@@ -171,8 +194,20 @@ table.dt tr:hover td{background:#fafafa;}
 
     <div id="sec-cancel" class="section">
       <div class="card" style="margin-bottom:16px;">
-        <div class="card-title">Харилцагчаар шүүх</div>
-        <div id="cancelMerchantTabs" style="display:flex;flex-wrap:wrap;gap:6px;"></div>
+        <div style="display:flex;align-items:center;gap:16px;flex-wrap:wrap;">
+          <div>
+            <div class="card-title" style="margin-bottom:8px;">Горимоор шүүх</div>
+            <div style="display:flex;gap:6px;">
+              <button onclick="setCancelMode('all')" id="cmAll" style="font-size:12px;padding:5px 14px;border-radius:6px;border:1px solid #1D9E75;background:#E1F5EE;color:#0F6E56;cursor:pointer;font-weight:600;">Бүгд</button>
+              <button onclick="setCancelMode('tat')" id="cmTat" style="font-size:12px;padding:5px 14px;border-radius:6px;border:1px solid #ddd;background:#fff;color:#555;cursor:pointer;">Татан авалт</button>
+              <button onclick="setCancelMode('aguu')" id="cmAguu" style="font-size:12px;padding:5px 14px;border-radius:6px;border:1px solid #ddd;background:#fff;color:#555;cursor:pointer;">Агуулах</button>
+            </div>
+          </div>
+          <div style="flex:1;">
+            <div class="card-title" style="margin-bottom:8px;">Харилцагчаар шүүх</div>
+            <div id="cancelMerchantTabs" style="display:flex;flex-wrap:wrap;gap:6px;"></div>
+          </div>
+        </div>
       </div>
       <div class="grid2">
         <div class="card">
@@ -246,7 +281,9 @@ let allOrders = [], allMerchants = [], filtered = [];
 let charts = {};
 let currentTab = 'overview';
 let cancelMerchantFilter = 'all';
+let cancelModeFilter = 'all';
 let merchantModeFilter = 'all';
+let merchantActivityFilter = null;
 
 // Төлвүүдийн монгол нэршил
 const STATUS_MN = {
@@ -283,6 +320,12 @@ const STATUS_MN = {
   'sals_not_pick_phone':'Утсаа аваагүй',
   'sals_unable_connect':'Холбогдох боломжгүй',
   'sals_delivered':'Хүргэгдсэн',
+  'sals_size_not_fit':'Хэмжээ таараагүй',
+  'sals_not_like_design':'Барааны загвар таалагдаагүй',
+  'sals_not_like_material':'Барааны материал таалагдаагүй',
+  'sals_not_like_picture':'Зураг шигээ биш',
+  'sals_refused_other':'Бусад',
+  'sals_choose_other':'Өөр өнгө, хэмжээнээс нь авсан',
   // cancel_reason keys
   'дахин оролдлого амжилтгүй':'Дахин оролдлого амжилтгүй',
 };
@@ -369,18 +412,24 @@ function loadData(){
       mode:String(r['Горим']||'')
     })).filter(r=>r.name && r.mode.toLowerCase()!=='тест' && r.mode.toLowerCase()!=='test');
 
-    const dates = allOrders.map(r=>r.date.getTime());
-    if(dates.length){
-      const mn = new Date(Math.min(...dates));
-      const mx = new Date(Math.max(...dates));
-      document.getElementById('dateFrom').value = mn.toISOString().slice(0,10);
-      document.getElementById('dateTo').value = mx.toISOString().slice(0,10);
-    }
+    // Тест харилцагчдын захиалгыг allOrders-оос хасна
+    const testMerchantNames = new Set(
+      (json.merchants||[])
+        .filter(r=>{ const m=String(r['Горим']||'').toLowerCase(); return m==='тест'||m==='test'; })
+        .map(r=>String(r['Нэр']||''))
+    );
+    allOrders = allOrders.filter(r=>!testMerchantNames.has(r.client));
+
+    // Default: сүүлийн 30 хоног
+    const today = new Date();
+    const from30 = new Date(today);
+    from30.setDate(from30.getDate()-30);
+    document.getElementById('dateFrom').value = from30.toISOString().slice(0,10);
+    document.getElementById('dateTo').value = today.toISOString().slice(0,10);
     document.getElementById('updatedAt').textContent = 'Шинэчлэгдсэн: '+new Date().toLocaleTimeString('mn-MN');
     document.getElementById('loadingMsg').style.display='none';
     document.getElementById('mainContent').style.display='block';
-    filtered = [...allOrders];
-    renderAll();
+    applyFilter();
     }catch(e){
       document.getElementById('loadingMsg').style.display='none';
       const el = document.getElementById('errMsg');
@@ -391,6 +440,53 @@ function loadData(){
   document.body.appendChild(script);
 }
 
+function setCancelMode(mode){
+  cancelModeFilter = mode;
+  ['all','tat','aguu'].forEach(m=>{
+    const btn = document.getElementById('cm'+m.charAt(0).toUpperCase()+m.slice(1));
+    if(!btn) return;
+    const active = m===mode;
+    btn.style.border = active?'1px solid #1D9E75':'1px solid #ddd';
+    btn.style.background = active?'#E1F5EE':'#fff';
+    btn.style.color = active?'#0F6E56':'#555';
+    btn.style.fontWeight = active?'600':'400';
+  });
+  cancelMerchantFilter = 'all';
+  renderCancel();
+}
+
+function toggleMerchantActivity(type){
+  if(merchantActivityFilter===type){ merchantActivityFilter=null; }
+  else { merchantActivityFilter=type; }
+  renderMerchant();
+}
+
+function renderMonthTabs(){
+  const now = new Date();
+  const MN_MONTHS = ['1-р сар','2-р сар','3-р сар','4-р сар','5-р сар','6-р сар','7-р сар','8-р сар','9-р сар','10-р сар','11-р сар','12-р сар'];
+  const tabs = [];
+  for(let i=2; i>=0; i--){
+    const d = new Date(now.getFullYear(), now.getMonth()-i, 1);
+    const y = d.getFullYear();
+    const m = d.getMonth();
+    const from = new Date(y,m,1).toISOString().slice(0,10);
+    const to = new Date(y,m+1,0).toISOString().slice(0,10);
+    tabs.push({label: MN_MONTHS[m], from, to});
+  }
+  const curFrom = document.getElementById('dateFrom').value;
+  const curTo = document.getElementById('dateTo').value;
+  document.getElementById('monthTabs').innerHTML = tabs.map(t=>{
+    const active = t.from===curFrom && t.to===curTo;
+    return `<button onclick="selectMonth('${t.from}','${t.to}')" style="font-size:12px;padding:5px 14px;border-radius:6px;border:1px solid ${active?'#1D9E75':'#ddd'};background:${active?'#E1F5EE':'#fff'};color:${active?'#0F6E56':'#555'};cursor:pointer;font-weight:${active?'600':'400'};">${t.label}</button>`;
+  }).join('');
+}
+
+function selectMonth(from, to){
+  document.getElementById('dateFrom').value = from;
+  document.getElementById('dateTo').value = to;
+  applyFilter();
+}
+
 function applyFilter(){
   const from = document.getElementById('dateFrom').value;
   const to = document.getElementById('dateTo').value;
@@ -399,17 +495,17 @@ function applyFilter(){
     if(to && r.date > new Date(to+'T23:59:59')) return false;
     return true;
   });
+  renderMonthTabs();
   renderAll();
 }
 
 function resetFilter(){
-  const dates = allOrders.map(r=>r.date.getTime());
-  if(dates.length){
-    document.getElementById('dateFrom').value = new Date(Math.min(...dates)).toISOString().slice(0,10);
-    document.getElementById('dateTo').value = new Date(Math.max(...dates)).toISOString().slice(0,10);
-  }
-  filtered = [...allOrders];
-  renderAll();
+  const today = new Date();
+  const from30 = new Date(today);
+  from30.setDate(from30.getDate()-30);
+  document.getElementById('dateFrom').value = from30.toISOString().slice(0,10);
+  document.getElementById('dateTo').value = today.toISOString().slice(0,10);
+  applyFilter();
 }
 
 function switchTab(tab){
@@ -517,6 +613,57 @@ function renderMerchant(){
   const aguuCount = allMerchants.filter(m=>{ const md=m.mode.toLowerCase(); return md.includes('агуулах')||md.includes('warehouse'); }).length;
   const total = allMerchants.length;
 
+  // Идэвхтэй / Шинэ / Больсон тооцоо
+  const fromVal = document.getElementById('dateFrom').value;
+  const toVal = document.getElementById('dateTo').value;
+  const fromDate = fromVal ? new Date(fromVal) : null;
+  const toDate = toVal ? new Date(toVal+'T23:59:59') : null;
+
+  // Өмнөх 30 хоног
+  const prevTo = fromDate ? new Date(fromDate.getTime()-1) : null;
+  const prevFrom = prevTo ? new Date(prevTo.getTime()-29*24*60*60*1000) : null;
+
+  const currentClients = new Set(filtered.map(r=>r.client));
+  const prevOrders = prevFrom && prevTo ? allOrders.filter(r=>r.date>=prevFrom&&r.date<=prevTo) : [];
+  const prevClients = new Set(prevOrders.map(r=>r.client));
+
+  const activeList = [...currentClients];
+  const newList = activeList.filter(c=>!prevClients.has(c));
+  const churnedList = [...prevClients].filter(c=>!currentClients.has(c));
+
+  document.getElementById('activeCount').textContent = activeList.length;
+  document.getElementById('newCount').textContent = newList.length;
+  document.getElementById('churnedCount').textContent = churnedList.length;
+
+  // Карт highlight
+  ['active','new','churned'].forEach(t=>{
+    const card = document.getElementById('card'+t.charAt(0).toUpperCase()+t.slice(1));
+    if(!card) return;
+    card.style.border = merchantActivityFilter===t?'2px solid #1D9E75':'1px solid #e5e5e5';
+    card.style.background = merchantActivityFilter===t?'#F0FBF7':'#fff';
+  });
+
+  // Жагсаалт харуулах
+  const listCard = document.getElementById('activityListCard');
+  const listTitle = document.getElementById('activityListTitle');
+  const listEl = document.getElementById('activityList');
+  if(merchantActivityFilter){
+    const map = {active:{list:activeList,label:'Идэвхтэй харилцагчид',color:'#0F6E56'}, new:{list:newList,label:'Шинэ харилцагчид',color:'#185FA5'}, churned:{list:churnedList,label:'Больсон харилцагчид',color:'#993C1D'}};
+    const {list,label,color} = map[merchantActivityFilter];
+    listTitle.textContent = label+' — '+list.length;
+    listTitle.style.color = color;
+    listEl.innerHTML = list.length ? list.sort().map((c,i)=>`
+      <div style="display:flex;align-items:center;gap:8px;padding:6px 0;border-bottom:0.5px solid #f0f0f0;">
+        <span style="font-size:11px;color:#aaa;min-width:20px;">${i+1}</span>
+        <span style="font-size:13px;font-weight:500;">${c}</span>
+        <span class="badge ${(merchantMap[c]?.mode||'').toLowerCase().includes('татан')?'tat':'aguu'}" style="margin-left:4px;">${merchantMap[c]?.mode||'-'}</span>
+      </div>
+    `).join('') : '<p style="color:#888;font-size:13px;padding:.5rem 0;">Харилцагч байхгүй</p>';
+    listCard.style.display='block';
+  } else {
+    listCard.style.display='none';
+  }
+
   // Mode filter tabs
   const byClient = groupBy(filtered, r=>r.client);
   const allRows = Object.entries(byClient).map(([name,orders])=>{
@@ -559,8 +706,10 @@ function renderMerchant(){
     const badgeClass = md.includes('агуулах')||md.includes('warehouse')?'aguu':md.includes('татан')||md.includes('pickup')?'tat':'other';
     const color = r.rate>=80?'#1D9E75':r.rate>=60?'#BA7517':'#993C1D';
     const pct = filtTotal ? Math.round(r.count/filtTotal*100) : 0;
+    const isNew = newList.includes(r.name);
     return`<tr>
-      <td style="font-weight:600;">${r.name||'Тодорхойгүй'}</td>
+      <td style="font-weight:600;">${r.name||'Тодорхойгүй'}${isNew?` <span style="font-size:10px;background:#E6F1FB;color:#185FA5;padding:1px 6px;border-radius:4px;font-weight:600;margin-left:4px;">Шинэ</span>`:''}
+      </td>
       <td><span class="badge ${badgeClass}">${r.mode||'-'}</span></td>
       <td style="text-align:right;">${fmt(r.count)} <span style="color:#aaa;font-size:11px;">(${pct}%)</span></td>
       <td style="text-align:right;color:#0F6E56;">${fmt(r.delivered)}</td>
@@ -581,7 +730,17 @@ function setMerchantMode(mode){
 }
 
 function renderCancel(){
-  const allCancelled = filtered.filter(r=>isCancelled(r));
+  const merchantMap = {};
+  allMerchants.forEach(m=>{ merchantMap[m.name]={mode:m.mode}; });
+
+  // Горимоор шүүх
+  const allCancelledBase = filtered.filter(r=>isCancelled(r));
+  const allCancelled = cancelModeFilter==='all' ? allCancelledBase : allCancelledBase.filter(r=>{
+    const md = (merchantMap[r.client]?.mode||'').toLowerCase();
+    if(cancelModeFilter==='tat') return md.includes('татан')||md.includes('pickup');
+    if(cancelModeFilter==='aguu') return md.includes('агуулах')||md.includes('warehouse');
+    return true;
+  });
 
   // Build merchant tabs
   const byClientAll = groupBy(allCancelled, r=>r.client);
