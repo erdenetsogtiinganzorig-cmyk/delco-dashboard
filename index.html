@@ -623,9 +623,11 @@ function renderMerchant(){
   const prevTo = fromDate ? new Date(fromDate.getTime()-1) : null;
   const prevFrom = prevTo ? new Date(prevTo.getTime()-29*24*60*60*1000) : null;
 
-  const currentClients = new Set(filtered.map(r=>r.client));
+  const knownMerchants = new Set(allMerchants.map(m=>m.name));
+
+  const currentClients = new Set(filtered.map(r=>r.client).filter(c=>knownMerchants.has(c)));
   const prevOrders = prevFrom && prevTo ? allOrders.filter(r=>r.date>=prevFrom&&r.date<=prevTo) : [];
-  const prevClients = new Set(prevOrders.map(r=>r.client));
+  const prevClients = new Set(prevOrders.map(r=>r.client).filter(c=>knownMerchants.has(c)));
 
   const activeList = [...currentClients];
   const newList = activeList.filter(c=>!prevClients.has(c));
